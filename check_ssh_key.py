@@ -9,6 +9,12 @@ import errno
 
 from nagios import nagios
 
+class Result (Exception):
+    def __init__ (self, status, msg):
+        super(Result, self).__init__()
+        self.status = status
+        self.msg = msg
+
 def parse_args():
     p = optparse.OptionParser()
 
@@ -20,41 +26,43 @@ def parse_args():
 
     return p.parse_args()
 
-def main():
-    opts, args = parse_args()
+def connect(server_name, port):
+    s = socket.socket(socket.AF_INET,
+            socket.SOCK_STREAM,
+            socket.IPPROTO_TCP)
+    s.connect((server_name, int(port)))
+    return s
 
+def ssh_connect(server_name, opts):
+    try:
+        s = connect(server_name, opts.port)
+        t = paramiko.Transport(s)
+        t.start_client()
+        key = t.get_remote_server_key()
+        t.close()
+    except paramiko.SSHException, detail:
+        raise Result(nagios.NAGIOS_STATUS_CRIT,
+                '%s: protocol error: %s' % (server_name, detail))
+    except socket.error, detail:
+        raise Result(nagios.NAGIOS_STATUS_CRIT,
+                '%s: %s' % (server_name, detail.strerror))
+
+    return (key, t.remote_version)
+
+def check_ssh(opts, args):
     try:
         server_name = args.pop(0)
     except IndexError:
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_WTF,
+        raise Result(nagios.NAGIOS_STATUS_WTF,
                 'You must provide a hostname.')
 
     try:
         hosts = paramiko.HostKeys(filename=opts.known_hosts_file)
     except IOError, detail:
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_WTF,
+        raise Result(nagios.NAGIOS_STATUS_WTF,
                 '%s: %s' % (opts.known_hosts_file, detail.strerror))
 
-    try:
-        s = socket.socket(socket.AF_INET,
-                socket.SOCK_STREAM,
-                socket.IPPROTO_TCP)
-        s.connect((server_name, int(opts.port)))
-    except socket.error, detail:
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_CRIT,
-                '%s: %s' % (server_name, detail.strerror))
-
-    try:
-        t = paramiko.Transport(s)
-        t.start_client()
-        key = t.get_remote_server_key()
-    except paramiko.SSHException:
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_CRIT,
-                '%s: protocol error' % server_name)
+    key,remote_version = ssh_connect(server_name, opts)
 
     if opts.verbose:
         print '%s host key fingerprint:' % server_name, \
@@ -71,18 +79,29 @@ def main():
                             opts.known_hosts_file)
                 hosts.save(opts.known_hosts_file)
     except IOError, detail:
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_WTF,
+        raise Result(nagios.NAGIOS_STATUS_WTF,
                 '%s: %s' % (opts.known_hosts_file, detail.strerror))
 
     if not hosts.check(server_name, key):
-        nagios.result('SSH',
-                nagios.NAGIOS_STATUS_CRIT,
+        raise Result(nagios.NAGIOS_STATUS_CRIT,
                 '%s: host key verification failed' % server_name)
     else:
+        raise Result(nagios.NAGIOS_STATUS_OKAY,
+                '%s: %s' % (server_name, remote_version))
+
+def main():
+    opts, args = parse_args()
+
+    try:
+        check_ssh(opts, args)
+    except Result, detail:
         nagios.result('SSH',
-                nagios.NAGIOS_STATUS_OKAY,
-                '%s: %s' % (server_name, t.remote_version))
+                detail.status,
+                detail.msg)
+    except Exception, detail:
+        nagios.result('SSH',
+                nagios.NAGIOS_STATUS_WTF,
+                'unexpected error: %s' % detail)
 
 if __name__ == '__main__':
     x = main()
