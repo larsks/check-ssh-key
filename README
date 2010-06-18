@@ -1,0 +1,5 @@
+Usage:
+
+check_ssh [ -f known_hosts ] [ -s ] [ -p <port> ] [ -t <timeout> ] <host>
+
+
