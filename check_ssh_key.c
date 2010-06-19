@@ -142,7 +142,8 @@ int main(int argc, char *argv[])
 	char *server_name;
 	struct addrinfo *server_addr;
 	int i, rc, sock = -1;
-	const char *fingerprint, *fingerprint_hex;
+	const char *fingerprint;
+	char 	*fingerprint_hex;
 	const char *hostkey;
 	size_t hklen;
 	int hktype;
@@ -191,25 +192,31 @@ int main(int argc, char *argv[])
 				rc);
 	}
 
+	// Get host key fingerprint and convert it into a string of
+	// hex digits.
 	fingerprint = libssh2_hostkey_hash(session, LIBSSH2_HOSTKEY_HASH_SHA1);
 	fingerprint_hex = (char *)malloc(strlen(fingerprint) * 3);
-
 	for(i = 0; i < 20; i++)
-		sprintf((char *)(fingerprint_hex + (i*3)), "%02X ", (unsigned char)fingerprint[i]);
+		sprintf((char *)(fingerprint_hex + (i*3)), "%02x:", (unsigned char)fingerprint[i]);
+	fingerprint_hex[strlen(fingerprint_hex)-1] = '\0';
 
 	if (verbose)
 		logmsg("%s key fingerprint: %s", server_name, fingerprint_hex);
 
-	hostkey = libssh2_session_hostkey(session, &hklen, &hktype);
-
-	if (!hostkey)
+	if (NULL == (hostkey = libssh2_session_hostkey(session,
+					&hklen, &hktype)))
 		nag_exit(NAG_WTF, "failed to obtain host key");
 
+	libssh2_session_disconnect(session,
+			"check_ssh_key: Host key exchange completed.");
+
+	// Check host key against known hosts cache.
 	rc = libssh2_knownhost_check(hosts,
 			server_name,
 			hostkey, hklen, 
 			LIBSSH2_KNOWNHOST_TYPE_PLAIN|LIBSSH2_KNOWNHOST_KEYENC_RAW|
-			(hktype == LIBSSH2_HOSTKEY_TYPE_RSA ? LIBSSH2_KNOWNHOST_KEY_SSHRSA
+			(hktype == LIBSSH2_HOSTKEY_TYPE_RSA
+			 ? LIBSSH2_KNOWNHOST_KEY_SSHRSA
 			 : LIBSSH2_KNOWNHOST_KEY_SSHDSS),
 			&store);
 
@@ -239,6 +246,8 @@ int main(int argc, char *argv[])
 
 				libssh2_knownhost_writefile(hosts, known_hosts_path,
 						LIBSSH2_KNOWNHOST_FILE_OPENSSH);
+
+				nag_exit(NAG_OKAY, "%s: %s", server_name, fingerprint_hex);
 			} else if (strict) {
 				nag_exit(NAG_CRIT, "%s: host key verification failed", server_name);
 			} else {
@@ -248,7 +257,9 @@ int main(int argc, char *argv[])
 			if (verbose)
 				logmsg("knownhost check: matched");
 
-			nag_exit(NAG_OKAY, "%s: %s", server_name, fingerprint_hex);
+			nag_exit(NAG_OKAY, "%s: %s",
+					server_name,
+					fingerprint_hex);
 			break;
 		case LIBSSH2_KNOWNHOST_CHECK_MISMATCH:
 			if (verbose)
@@ -257,8 +268,6 @@ int main(int argc, char *argv[])
 			nag_exit(NAG_CRIT, "%s: host key verification failed");
 			break;
 	}
-
-	logmsg("all done.");
 
 shutdown:
 	close(sock);
