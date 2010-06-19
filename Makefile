@@ -1,5 +1,5 @@
 CFLAGS = -g
-LIBS = libssh2.a -lssl #-lefence
+LIBS = -lssh2
 
 all: check_ssh_key
 
