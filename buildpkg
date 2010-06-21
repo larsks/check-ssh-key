@@ -1,0 +1,23 @@
+#!/bin/sh
+
+version=$1
+commit=${2:-master}
+
+[ "$version" ] || exit
+
+pkg=check_ssh_key-$version
+
+echo "+ Exporting git commit $commit."
+git archive --prefix=$pkg/ $commit | tar xvf -
+
+echo "+ Preparing for distribution."
+(
+	cd $pkg
+	sed -i "s/VERSION_DEV/$version/g" configure.ac
+	autoconf
+)
+
+echo "+ Building tarball."
+tar -czv -f $pkg.tar.gz --exclude=autom4te.cache $pkg
+rm -rf $pkg
+
