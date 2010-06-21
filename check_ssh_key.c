@@ -1,3 +1,21 @@
+/*
+ *  check_ssh_key -- Nagios/Icinga plugin for checking ssh host keys
+ *  Copyright (C) 2010 Lars Kellogg-Stedman
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <libssh2.h>
 
 #include <unistd.h>
@@ -15,10 +33,6 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <sys/select.h>
-
-#ifndef INADDR_NONE
-#define INADDR_NONE (in_addr_t)-1
-#endif
 
 #define OPT_KNOWNHOSTS	'f'
 #define OPT_TIMEOUT	't'
@@ -177,6 +191,9 @@ int main(int argc, char *argv[])
 		nag_exit(NAG_WTF, "Could not initialize SSH session");
 	}
 
+	/* This enables debug output from libssh2 (if the library was
+	 * compiled with --enable-debug.
+	 */
 	if (debug)
 		libssh2_trace(session, ~0);
 
@@ -202,8 +219,9 @@ int main(int argc, char *argv[])
 				rc);
 	}
 
-	// Get host key fingerprint and convert it into a string of
-	// hex digits.
+	/* Get host key fingerprint and convert it into a string of
+	 * hex digits.
+	 */
 	fingerprint = libssh2_hostkey_hash(session, LIBSSH2_HOSTKEY_HASH_SHA1);
 	fingerprint_hex = (char *)malloc(strlen(fingerprint) * 3);
 	for(i = 0; i < 20; i++)
@@ -222,7 +240,7 @@ int main(int argc, char *argv[])
 			? message
 			: "check_ssh_key: Host key exchange completed.");
 
-	// Check host key against known hosts cache.
+	/* Check host key against known hosts cache. */
 	rc = libssh2_knownhost_check(hosts,
 			server_name,
 			hostkey, hklen, 
@@ -282,10 +300,6 @@ int main(int argc, char *argv[])
 			nag_exit(NAG_CRIT, "%s: host key verification failed");
 			break;
 	}
-
-shutdown:
-	close(sock);
-	libssh2_exit();
 
 	return 0;
 }
