@@ -27,8 +27,9 @@
 #define OPT_VERBOSE	'v'
 #define OPT_HELP	'h'
 #define OPT_DEBUG	'd'
+#define OPT_MESSAGE	'm'
 
-#define OPTSTRING	"f:t:p:svhd"
+#define OPTSTRING	"f:t:p:svhdm:"
 
 #define	NAG_OKAY	0
 #define NAG_WARN	1
@@ -41,6 +42,7 @@ int	timeout			= 0;
 int	strict			= 0;
 int	verbose			= 0;
 int	debug			= 0;
+char	*message		= NULL;
 
 char	*progname		= "check_ssh";
 
@@ -120,6 +122,10 @@ void process_args (int argc, char *argv[]) {
 				usage(stdout);
 				exit(0);
 
+			case OPT_MESSAGE:
+				message = optarg;
+				break;
+
 			case '?':
 				usage(stderr);
 				exit(2);
@@ -184,10 +190,14 @@ int main(int argc, char *argv[])
 	hosts = libssh2_knownhost_init(session);
 
 	if (known_hosts_path)
-		libssh2_knownhost_readfile(hosts, known_hosts_path, LIBSSH2_KNOWNHOST_FILE_OPENSSH);
+		if (0 != libssh2_knownhost_readfile(hosts,
+					known_hosts_path,
+					LIBSSH2_KNOWNHOST_FILE_OPENSSH))
+			nag_exit(NAG_WTF,
+					"Failed to read known_hosts file.");
 
 	if (0 != (rc = libssh2_session_startup(session, sock))) {
-		nag_exit(NAG_WTF,
+		nag_exit(NAG_CRIT,
 				"Error when starting up SSH session: %d",
 				rc);
 	}
@@ -208,7 +218,9 @@ int main(int argc, char *argv[])
 		nag_exit(NAG_WTF, "failed to obtain host key");
 
 	libssh2_session_disconnect(session,
-			"check_ssh_key: Host key exchange completed.");
+			message
+			? message
+			: "check_ssh_key: Host key exchange completed.");
 
 	// Check host key against known hosts cache.
 	rc = libssh2_knownhost_check(hosts,
@@ -244,8 +256,10 @@ int main(int argc, char *argv[])
 						 : LIBSSH2_KNOWNHOST_KEY_SSHDSS),
 						NULL);
 
-				libssh2_knownhost_writefile(hosts, known_hosts_path,
-						LIBSSH2_KNOWNHOST_FILE_OPENSSH);
+				if (0 != libssh2_knownhost_writefile(hosts,
+							known_hosts_path,
+						LIBSSH2_KNOWNHOST_FILE_OPENSSH))
+					nag_exit(NAG_WTF, "Failed to write known_hosts file.");
 
 				nag_exit(NAG_OKAY, "%s: %s", server_name, fingerprint_hex);
 			} else if (strict) {
