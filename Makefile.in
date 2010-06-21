@@ -1,0 +1,19 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@/nagios/plugins
+
+CFLAGS = -g
+LIBS = -lssh2
+
+all: check_ssh_key
+
+check_ssh_key: check_ssh_key.o
+	$(CC) -o $@ $< $(LIBS)
+
+install: all
+	install -d -m 755 $(DESTDIR)$(libdir)
+	install -m 755 check_ssh_key $(DESTDIR)$(libdir)/check_ssh_key
+
+clean:
+	rm -f check_ssh_key.o
+
