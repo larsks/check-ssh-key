@@ -5,7 +5,7 @@ commit=${2:-master}
 
 [ "$version" ] || exit
 
-pkg=check_ssh_key-$version
+pkg=check-ssh-key-$version
 
 echo "+ Exporting git commit $commit."
 git archive --prefix=$pkg/ $commit | tar xvf -
