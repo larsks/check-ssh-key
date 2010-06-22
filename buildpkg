@@ -1,6 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 
-version=$1
+gen_version_string () {
+	date "+0.%Y%m%d"
+}
+
+version=${1:-$(gen_version_string)}
 commit=${2:-master}
 
 [ "$version" ] || exit
@@ -18,6 +22,6 @@ echo "+ Preparing for distribution."
 )
 
 echo "+ Building tarball."
-tar -czv -f $pkg.tar.gz --exclude=autom4te.cache $pkg
+tar -czv -f $pkg.tar.gz --exclude=autom4te.cache --exclude=.gitignore $pkg
 rm -rf $pkg
 
